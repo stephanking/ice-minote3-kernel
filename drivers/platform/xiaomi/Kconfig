@@ -1,0 +1,30 @@
+# Xiaomi configuration options
+
+config MACH_XIAOMI
+	bool "Xiaomi board"
+	depends on ARCH_QCOM
+	help
+	 Support for Xiaomi boards.
+
+config MACH_XIAOMI_SDM660
+	bool "Xiaomi SDM660 boards"
+	depends on ARCH_SDM660
+	select MACH_XIAOMI
+	help
+	 Support for SDM660 Xiaomi boards.
+
+menu "Xiaomi board selection"
+
+config MACH_JASON
+	bool "jason board"
+	select MACH_XIAOMI_SDM660
+	help
+	 Support for Xiaomi Mi Note 3, codenamed jason.
+
+config MACH_NITROGEN
+	bool "nitrogen board"
+	select MACH_XIAOMI_SDM660
+	help
+	 Support for Xiaomi Mi Max 3, codenamed nitrogen.
+
+endmenu
