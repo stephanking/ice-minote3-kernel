@@ -7,6 +7,7 @@
  * (C) Copyright 2003 Hewlett-Packard
  * (C) Copyright 2004 Jon Smirl <jonsmirl@yahoo.com>
  * (C) Copyright 2004 Silicon Graphics, Inc. Jesse Barnes <jbarnes@sgi.com>
+ * Copyright (C) 2018 XiaoMi, Inc.
  *
  * File attributes for PCI devices
  *

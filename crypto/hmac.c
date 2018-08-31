@@ -5,6 +5,7 @@
  *
  * Copyright (c) 2002 James Morris <jmorris@intercode.com.au>
  * Copyright (c) 2006 Herbert Xu <herbert@gondor.apana.org.au>
+ * Copyright (C) 2018 XiaoMi, Inc.
  *
  * The HMAC implementation is derived from USAGI.
  * Copyright (c) 2002 Kazunori Miyazawa <miyazawa@linux-ipv6.org> / USAGI

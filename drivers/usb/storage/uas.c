@@ -5,6 +5,7 @@
  * Copyright Hans de Goede <hdegoede@redhat.com> for Red Hat, Inc. 2013 - 2016
  * Copyright Matthew Wilcox for Intel Corp, 2010
  * Copyright Sarah Sharp for Intel Corp, 2010
+ * Copyright (C) 2018 XiaoMi, Inc.
  *
  * Distributed under the terms of the GNU GPL, version two.
  */

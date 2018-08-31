@@ -4,6 +4,7 @@
  *   Mixer control part
  *
  *   Copyright (c) 2002 by Takashi Iwai <tiwai@suse.de>
+ *   Copyright (C) 2018 XiaoMi, Inc.
  *
  *   Many codes borrowed from audio.c by
  *	    Alan Cox (alan@lxorguk.ukuu.org.uk)
@@ -2472,7 +2473,7 @@ static int parse_audio_unit(struct mixer_build *state, int unitid)
 
 static void snd_usb_mixer_free(struct usb_mixer_interface *mixer)
 {
-	/* kill pending URBs */
+	/*kill pending URBs */
 	snd_usb_mixer_disconnect(mixer);
 
 	kfree(mixer->id_elems);

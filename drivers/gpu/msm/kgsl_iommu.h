@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2016,2018 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,7 +26,7 @@
  */
 #define KGSL_IOMMU_GLOBAL_MEM_SIZE	SZ_8M
 #define KGSL_IOMMU_GLOBAL_MEM_BASE32	0xf8000000
-#define KGSL_IOMMU_GLOBAL_MEM_BASE64	0xfc000000
+#define KGSL_IOMMU_GLOBAL_MEM_BASE64	0x100000000ULL
 
 #define KGSL_IOMMU_GLOBAL_MEM_BASE(__mmu)	\
 	(MMU_FEATURE(__mmu, KGSL_MMU_64BIT) ? \
