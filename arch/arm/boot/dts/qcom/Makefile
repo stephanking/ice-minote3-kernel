@@ -179,6 +179,16 @@ endif
 
 dtb-$(CONFIG_ARCH_MSMHAMSTER) += msmhamster-rumi.dtb
 
+ifeq ($(CONFIG_MACH_JASON),y)
+dtb-$(CONFIG_ARCH_SDM660) += \
+	jason-sdm660.dtb \
+	xiaomi-sdm660.dtb
+else
+ifeq ($(CONFIG_MACH_NITROGEN),y)
+dtb-$(CONFIG_ARCH_SDM636) += \
+	nitrogen-sdm636.dtb \
+	xiaomi-sdm660.dtb
+else
 dtb-$(CONFIG_ARCH_SDM660) += sdm660-sim.dtb \
 	sdm660-internal-codec-cdp.dtb \
 	sdm660-internal-codec-mtp.dtb \
@@ -262,6 +272,8 @@ dtb-$(CONFIG_ARCH_SDM660) += sdm660-sim.dtb \
 	nitrogen-sdm636.dtb \
 	xiaomi-sdm660.dtb \
 	jason-sdm660.dtb
+endif
+endif
 
 dtb-$(CONFIG_ARCH_SDM630) += sdm630-rumi.dtb \
 	sdm630-pm660a-rumi.dtb \
