@@ -1,9 +1,6 @@
 /*
  * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
  *
- * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
- *
- *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all
@@ -17,12 +14,6 @@
  * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
- */
-
-/*
- * This file was originally distributed by Qualcomm Atheros, Inc.
- * under proprietary terms before Copyright ownership was assigned
- * to the Linux Foundation.
  */
 
 /**
@@ -491,6 +482,17 @@ static void hdd_process_regulatory_data(hdd_context_t *hdd_ctx,
 
 			wiphy_chan =
 				&(wiphy->bands[band_num]->channels[chan_num]);
+
+			while ((wiphy_chan->center_freq !=
+					chan_mapping[chan_enum].center_freq) &&
+					(chan_enum < NUM_CHANNELS))
+				chan_enum++;
+			if (NUM_CHANNELS == chan_enum) {
+				hdd_alert("wiphy channel freq %d not found",
+						wiphy_chan->center_freq);
+				break;
+			}
+
 			cds_chan = &(reg_channels[chan_enum]);
 			if (CHAN_ENUM_144 == chan_enum)
 				wiphy_chan_144 = wiphy_chan;
@@ -730,7 +732,7 @@ void hdd_reg_notifier(struct wiphy *wiphy,
 	enum dfs_region dfs_reg;
 	int32_t ret_val;
 
-	hdd_info("country: %c%c, initiator %d, dfs_region: %d",
+	hdd_debug("country: %c%c, initiator %d, dfs_region: %d",
 		  request->alpha2[0],
 		  request->alpha2[1],
 		  request->initiator,

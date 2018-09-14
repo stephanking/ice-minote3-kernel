@@ -1,8 +1,5 @@
 /*
- * Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
- *
- * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
- *
+ * Copyright (c) 2015-2018 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -17,12 +14,6 @@
  * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
- */
-
-/*
- * This file was originally distributed by Qualcomm Atheros, Inc.
- * under proprietary terms before Copyright ownership was assigned
- * to the Linux Foundation.
  */
 
 /*
@@ -1292,6 +1283,9 @@ QDF_STATUS wmi_unified_cmd_send(wmi_unified_t wmi_handle, wmi_buf_t buf,
 	QDF_STATUS status;
 	uint16_t htc_tag = 0;
 
+	if (wmi_handle->is_target_ready && !wmi_handle->is_target_ready())
+		return QDF_STATUS_E_FAILURE;
+
 	if (wmi_get_runtime_pm_inprogress(wmi_handle)) {
 		htc_tag =
 			(A_UINT16)wmi_handle->ops->wmi_set_htc_tx_tag(
@@ -1331,6 +1325,7 @@ QDF_STATUS wmi_unified_cmd_send(wmi_unified_t wmi_handle, wmi_buf_t buf,
 		return QDF_STATUS_E_NOMEM;
 	}
 
+	qdf_mem_zero(qdf_nbuf_data(buf), sizeof(WMI_CMD_HDR));
 	WMI_SET_FIELD(qdf_nbuf_data(buf), WMI_CMD_HDR, COMMANDID, cmd_id);
 
 	qdf_atomic_inc(&wmi_handle->pending_cmds);
@@ -1549,22 +1544,9 @@ static void wmi_process_fw_event_worker_thread_ctx
 		(struct wmi_unified *wmi_handle, HTC_PACKET *htc_packet)
 {
 	wmi_buf_t evt_buf;
-	uint32_t id;
-	uint8_t *data;
 
 	evt_buf = (wmi_buf_t) htc_packet->pPktContext;
-	id = WMI_GET_FIELD(qdf_nbuf_data(evt_buf), WMI_CMD_HDR, COMMANDID);
-	data = qdf_nbuf_data(evt_buf);
 
-#ifdef WMI_INTERFACE_EVENT_LOGGING
-	if (wmi_handle->log_info.wmi_logging_enable) {
-		qdf_spin_lock_bh(&wmi_handle->log_info.wmi_record_lock);
-		/* Exclude 4 bytes of TLV header */
-		WMI_RX_EVENT_RECORD(wmi_handle, id, ((uint8_t *) data +
-				wmi_handle->log_info.buf_offset_event));
-		qdf_spin_unlock_bh(&wmi_handle->log_info.wmi_record_lock);
-	}
-#endif
 	qdf_spin_lock_bh(&wmi_handle->eventq_lock);
 	qdf_nbuf_queue_add(&wmi_handle->event_queue, evt_buf);
 	qdf_spin_unlock_bh(&wmi_handle->eventq_lock);
@@ -1601,6 +1583,19 @@ static void wmi_control_rx(void *ctx, HTC_PACKET *htc_packet)
 	qdf_spin_lock_bh(&wmi_handle->ctx_lock);
 	exec_ctx = wmi_handle->ctx[idx];
 	qdf_spin_unlock_bh(&wmi_handle->ctx_lock);
+
+#ifdef WMI_INTERFACE_EVENT_LOGGING
+	if (wmi_handle->log_info.wmi_logging_enable) {
+		uint8_t *data;
+		data = qdf_nbuf_data(evt_buf);
+
+		qdf_spin_lock_bh(&wmi_handle->log_info.wmi_record_lock);
+		/* Exclude 4 bytes of TLV header */
+		WMI_RX_EVENT_RECORD(wmi_handle, id, ((uint8_t *) data +
+				wmi_handle->log_info.buf_offset_event));
+		qdf_spin_unlock_bh(&wmi_handle->log_info.wmi_record_lock);
+	}
+#endif
 
 	if (exec_ctx == WMI_RX_WORK_CTX) {
 		wmi_process_fw_event_worker_thread_ctx
@@ -1710,19 +1705,19 @@ end:
 
 }
 
-#define WMI_WQ_WD_TIMEOUT (10 * 1000) /* 10s */
+#define WMI_WQ_WD_TIMEOUT (30 * 1000) /* 30s */
 
 static inline void wmi_workqueue_watchdog_warn(uint32_t msg_type_id)
 {
 	QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
-		  "%s: Message type %x has exceeded its alloted time of %ds",
+		  "%s: WLAN_BUG_RCA: Message type %x has exceeded its alloted time of %ds",
 		  __func__, msg_type_id, WMI_WQ_WD_TIMEOUT / 1000);
 }
 
 #ifdef CONFIG_SLUB_DEBUG_ON
-static void wmi_workqueue_watchdog_bite(void *arg)
+static void wmi_workqueue_watchdog_bite(unsigned long arg)
 {
-	struct wmi_wq_dbg_info *info = arg;
+	struct wmi_wq_dbg_info *info = (struct wmi_wq_dbg_info *)arg;
 
 	wmi_workqueue_watchdog_warn(info->wd_msg_type_id);
 	qdf_print_thread_trace(info->task);
@@ -1732,9 +1727,9 @@ static void wmi_workqueue_watchdog_bite(void *arg)
 	QDF_BUG(0);
 }
 #else
-static inline void wmi_workqueue_watchdog_bite(void *arg)
+static inline void wmi_workqueue_watchdog_bite(unsigned long arg)
 {
-	struct wmi_wq_dbg_info *info = arg;
+	struct wmi_wq_dbg_info *info = (struct wmi_wq_dbg_info *)arg;
 
 	wmi_workqueue_watchdog_warn(info->wd_msg_type_id);
 }
@@ -2121,6 +2116,27 @@ void wmi_set_tgt_assert(wmi_unified_t wmi_handle, bool val)
 {
 	wmi_handle->tgt_force_assert_enable = val;
 }
+
+/**
+ * wmi_stop() - generic function to block unified WMI command
+ * @wmi_handle: handle to WMI.
+ *
+ * @Return: success always.
+ */
+int
+wmi_stop(wmi_unified_t wmi_handle)
+{
+	QDF_TRACE(QDF_MODULE_ID_WMI, QDF_TRACE_LEVEL_INFO,
+		  "WMI Stop\n");
+	wmi_handle->wmi_stopinprogress = 1;
+	return 0;
+}
+
+void wmi_register_tgt_ready_cb(wmi_unified_t wmi_handle, bool (*cb)(void))
+{
+	wmi_handle->is_target_ready = cb;
+}
+
 #ifdef WMI_NON_TLV_SUPPORT
 /**
  * API to flush all the previous packets  associated with the wmi endpoint
@@ -2134,17 +2150,4 @@ wmi_flush_endpoint(wmi_unified_t wmi_handle)
 		wmi_handle->wmi_endpoint_id, 0);
 }
 
-/**
- * generic function to block unified WMI command
- * @param wmi_handle      : handle to WMI.
- * @return 0  on success and -ve on failure.
- */
-int
-wmi_stop(wmi_unified_t wmi_handle)
-{
-	QDF_TRACE(QDF_MODULE_ID_WMI, QDF_TRACE_LEVEL_INFO,
-			"WMI Stop\n");
-	wmi_handle->wmi_stopinprogress = 1;
-	return 0;
-}
 #endif

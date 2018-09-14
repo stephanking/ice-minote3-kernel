@@ -1,9 +1,6 @@
 /*
  * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
- * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
- *
- *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all
@@ -19,12 +16,6 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/*
- * This file was originally distributed by Qualcomm Atheros, Inc.
- * under proprietary terms before Copyright ownership was assigned
- * to the Linux Foundation.
- */
-
 #include <qdf_atomic.h>         /* qdf_atomic_inc, etc. */
 #include <qdf_lock.h>           /* qdf_os_spinlock */
 #include <qdf_time.h>           /* qdf_system_ticks, etc. */
@@ -33,7 +24,7 @@
 
 #include <cds_queue.h>          /* TAILQ */
 #ifdef QCA_COMPUTE_TX_DELAY
-#include <ieee80211.h>          /* ieee80211_frame, etc. */
+#include <linux/ieee80211.h>          /* ieee80211_frame, etc. */
 #include <enet.h>               /* ethernet_hdr_t, etc. */
 #include <ipv6_defs.h>          /* ipv6_traffic_class */
 #endif
@@ -584,6 +575,41 @@ void ol_tx_flow_pool_unlock(struct ol_tx_desc_t *tx_desc)
 #endif
 
 /**
+ * ol_tx_notify_completion() - Notify tx completion for this desc
+ * @tx_desc: tx desc
+ * @netbuf:  buffer
+ *
+ * Return: none
+ */
+static void ol_tx_notify_completion(struct ol_tx_desc_t *tx_desc,
+				    qdf_nbuf_t netbuf)
+{
+	void *osif_dev;
+	ol_txrx_completion_fp tx_compl_cbk = NULL;
+
+	qdf_assert(tx_desc);
+
+	ol_tx_flow_pool_lock(tx_desc);
+	/*
+	 * In cases when vdev has gone down and tx completion
+	 * are received, leads to NULL vdev access.
+	 * So, check for NULL before dereferencing it.
+	 */
+	if (!tx_desc->vdev ||
+	    !tx_desc->vdev->osif_dev ||
+	    !tx_desc->vdev->tx_comp ||
+	    !tx_desc->notify_tx_comp) {
+		ol_tx_flow_pool_unlock(tx_desc);
+		return;
+	}
+	osif_dev = tx_desc->vdev->osif_dev;
+	tx_compl_cbk = tx_desc->vdev->tx_comp;
+	ol_tx_flow_pool_unlock(tx_desc);
+
+	tx_compl_cbk(netbuf, osif_dev);
+}
+
+/**
  * ol_tx_update_connectivity_stats() - update connectivity stats
  * @tx_desc: tx desc
  * @netbuf:  buffer
@@ -617,9 +643,8 @@ static void ol_tx_update_connectivity_stats(struct ol_tx_desc_t *tx_desc,
 	}
 	osif_dev = tx_desc->vdev->osif_dev;
 	stats_rx = tx_desc->vdev->stats_rx;
-	ol_tx_flow_pool_unlock(tx_desc);
-
 	pkt_type_bitmap = cds_get_connectivity_stats_pkt_bitmap(osif_dev);
+	ol_tx_flow_pool_unlock(tx_desc);
 
 	if (pkt_type_bitmap) {
 		if (status != htt_tx_status_download_fail)
@@ -749,6 +774,7 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 	union ol_tx_desc_list_elem_t *lcl_freelist = NULL;
 	union ol_tx_desc_list_elem_t *tx_desc_last = NULL;
 	ol_tx_desc_list tx_descs;
+
 	TAILQ_INIT(&tx_descs);
 
 	ol_tx_delay_compute(pdev, status, desc_ids, num_msdus);
@@ -780,6 +806,9 @@ ol_tx_completion_handler(ol_txrx_pdev_handle pdev,
 			if (qdf_nbuf_data_is_arp_req(netbuf))
 				ol_tx_update_arp_stats(tx_desc, netbuf, status);
 		}
+
+		/* check tx completion notification */
+		ol_tx_notify_completion(tx_desc, netbuf);
 
 		/* track connectivity stats */
 		ol_tx_update_connectivity_stats(tx_desc, netbuf,
@@ -862,6 +891,11 @@ void ol_tx_desc_update_group_credit(ol_txrx_pdev_handle pdev,
 	uint8_t i, is_member;
 	uint16_t vdev_id_mask;
 	struct ol_tx_desc_t *tx_desc;
+
+	if (tx_desc_id >= pdev->tx_desc.pool_size) {
+		qdf_print("%s: Invalid desc id", __func__);
+		return;
+	}
 
 	tx_desc = ol_tx_desc_find(pdev, tx_desc_id);
 	for (i = 0; i < OL_TX_MAX_TXQ_GROUPS; i++) {

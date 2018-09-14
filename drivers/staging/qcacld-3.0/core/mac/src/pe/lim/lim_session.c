@@ -1,8 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
- *
- * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
- *
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -17,12 +14,6 @@
  * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
- */
-
-/*
- * This file was originally distributed by Qualcomm Atheros, Inc.
- * under proprietary terms before Copyright ownership was assigned
- * to the Linux Foundation.
  */
 
 /**=========================================================================
@@ -46,6 +37,10 @@
 
 #include "sch_api.h"
 #include "lim_send_messages.h"
+
+
+static struct sDphHashNode
+	g_dph_node_array[SIR_MAX_SUPPORTED_BSS][CFG_SAP_MAX_NO_PEERS_MAX + 1];
 
 /*--------------------------------------------------------------------------
 
@@ -406,6 +401,7 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 	QDF_STATUS status;
 	uint8_t i;
 	tpPESession session_ptr;
+
 	for (i = 0; i < pMac->lim.maxBssId; i++) {
 		/* Find first free room in session table */
 		if (pMac->lim.gpSession[i].valid == true)
@@ -428,17 +424,7 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 		return NULL;
 	}
 
-	session_ptr->dph.dphHashTable.pDphNodeArray =
-		qdf_mem_malloc(sizeof(tDphHashNode) * (numSta + 1));
-	if (NULL == session_ptr->dph.dphHashTable.pDphNodeArray) {
-		pe_err("memory allocate failed!");
-		qdf_mem_free(session_ptr->dph.dphHashTable.pHashTable);
-		session_ptr->dph.dphHashTable.
-		pHashTable = NULL;
-		return NULL;
-	}
-
-
+	session_ptr->dph.dphHashTable.pDphNodeArray = g_dph_node_array[i];
 	session_ptr->dph.dphHashTable.size = numSta + 1;
 	dph_hash_table_class_init(pMac, &session_ptr->dph.dphHashTable);
 	session_ptr->gpLimPeerIdxpool = qdf_mem_malloc(
@@ -447,7 +433,9 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 	if (NULL == session_ptr->gpLimPeerIdxpool) {
 		pe_err("memory allocate failed!");
 		qdf_mem_free(session_ptr->dph.dphHashTable.pHashTable);
-		qdf_mem_free(session_ptr->dph.dphHashTable.pDphNodeArray);
+		qdf_mem_zero(session_ptr->dph.dphHashTable.pDphNodeArray,
+			sizeof(struct sDphHashNode) *
+			(CFG_SAP_MAX_NO_PEERS_MAX + 1));
 		session_ptr->dph.dphHashTable.pHashTable = NULL;
 		session_ptr->dph.dphHashTable.pDphNodeArray = NULL;
 		return NULL;
@@ -482,6 +470,7 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 		    sizeof(session_ptr->peerAIDBitmap), 0);
 	session_ptr->tdls_prohibited = false;
 	session_ptr->tdls_chan_swit_prohibited = false;
+	session_ptr->is_tdls_csa = false;
 #endif
 	session_ptr->fWaitForProbeRsp = 0;
 	session_ptr->fIgnoreCapsChange = 0;
@@ -491,17 +480,20 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 
 	if (eSIR_INFRA_AP_MODE == bssType || eSIR_IBSS_MODE == bssType) {
 		session_ptr->pSchProbeRspTemplate =
-			qdf_mem_malloc(SCH_MAX_PROBE_RESP_SIZE);
+			qdf_mem_malloc(SIR_MAX_PROBE_RESP_SIZE);
 		session_ptr->pSchBeaconFrameBegin =
-			qdf_mem_malloc(SCH_MAX_BEACON_SIZE);
+			qdf_mem_malloc(SIR_MAX_BEACON_SIZE);
 		session_ptr->pSchBeaconFrameEnd =
-			qdf_mem_malloc(SCH_MAX_BEACON_SIZE);
+			qdf_mem_malloc(SIR_MAX_BEACON_SIZE);
 		if ((NULL == session_ptr->pSchProbeRspTemplate)
 		    || (NULL == session_ptr->pSchBeaconFrameBegin)
 		    || (NULL == session_ptr->pSchBeaconFrameEnd)) {
 			pe_err("memory allocate failed!");
 			qdf_mem_free(session_ptr->dph.dphHashTable.pHashTable);
-			qdf_mem_free(session_ptr->dph.dphHashTable.pDphNodeArray);
+			qdf_mem_zero(
+				session_ptr->dph.dphHashTable.pDphNodeArray,
+				sizeof(struct sDphHashNode) *
+				(CFG_SAP_MAX_NO_PEERS_MAX + 1));
 			qdf_mem_free(session_ptr->gpLimPeerIdxpool);
 			qdf_mem_free(session_ptr->pSchProbeRspTemplate);
 			qdf_mem_free(session_ptr->pSchBeaconFrameBegin);
@@ -577,8 +569,6 @@ tpPESession pe_find_session_by_bssid(tpAniSirGlobal pMac, uint8_t *bssid,
 		}
 	}
 
-	pe_debug("Session lookup fails for BSSID:");
-	lim_print_mac_addr(pMac, bssid, LOGD);
 	return NULL;
 
 }
@@ -596,6 +586,7 @@ tpPESession pe_find_session_by_bssid(tpAniSirGlobal pMac, uint8_t *bssid,
 tpPESession pe_find_session_by_bss_idx(tpAniSirGlobal pMac, uint8_t bssIdx)
 {
 	uint8_t i;
+
 	for (i = 0; i < pMac->lim.maxBssId; i++) {
 		/* If BSSID matches return corresponding tables address */
 		if ((pMac->lim.gpSession[i].valid)
@@ -738,7 +729,9 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 	}
 
 	if (session->dph.dphHashTable.pDphNodeArray != NULL) {
-		qdf_mem_free(session->dph.dphHashTable.pDphNodeArray);
+		qdf_mem_zero(session->dph.dphHashTable.pDphNodeArray,
+			sizeof(struct sDphHashNode) *
+			(CFG_SAP_MAX_NO_PEERS_MAX + 1));
 		session->dph.dphHashTable.pDphNodeArray = NULL;
 	}
 
