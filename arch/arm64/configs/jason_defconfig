@@ -1,4 +1,4 @@
-CONFIG_LOCALVERSION="_ice-minote3-kernel_v1.1.2-dev"
+CONFIG_LOCALVERSION="_ice-kernel_v1.2.0-alpha@Tokyko"
 # CONFIG_LOCALVERSION_AUTO is not set
 # CONFIG_USELIB is not set
 CONFIG_AUDIT=y
